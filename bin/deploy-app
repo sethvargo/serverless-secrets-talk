@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+# Copyright 2019 Seth Vargo
+# Copyright 2019 Google, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+PROJECT="sethvargo-oscon19"
+REDIS_HOST="$(gcloud compute instances describe myredis --project "${PROJECT}" --zone "us-central1-b" --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')"
+REDIS_PASS="super-secret"
+
+cd /Users/sethvargo/Development/serverless-secrets-talk/app
+
+gcloud builds submit \
+  --project "${PROJECT}" \
+  --tag "gcr.io/${PROJECT}/myapp" \
+  .
+
+gcloud alpha run deploy "myapp" \
+  --project "${PROJECT}" \
+  --image "gcr.io/${PROJECT}/myapp" \
+  --allow-unauthenticated \
+  --platform "managed" \
+  --concurrency "10" \
+  --region "us-central1" \
+  --set-env-vars "REDIS_HOST=${REDIS_HOST},REDIS_PASS=${REDIS_PASS}" \
+  --service-account "myapp-sa@${PROJECT}.iam.gserviceaccount.com" \
+  --memory "1Gi"
