@@ -20,8 +20,7 @@ PROJECT="sethvargo-devsecconseattle-19"
 
 pushd $GOPATH/src/github.com/sethvargo/go-malice &>/dev/null
 
-gcloud builds submit \
-  --project "${PROJECT}" \
+docker build \
   --tag "gcr.io/${PROJECT}/malice-server" \
   .
 
