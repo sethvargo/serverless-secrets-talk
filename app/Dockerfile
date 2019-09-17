@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.12 AS builder
+FROM golang:1.13-alpine AS builder
 
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
@@ -34,9 +34,6 @@ RUN go build \
 
 
 
-FROM alpine:latest
-RUN apk --no-cache add ca-certificates && \
-  update-ca-certificates
-
+FROM gcr.io/distroless/static
 COPY --from=builder /bin/myapp /bin/myapp
 ENTRYPOINT ["/bin/myapp"]

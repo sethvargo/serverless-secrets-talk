@@ -25,7 +25,7 @@ func berglasAccess(obj string) (string, error) {
 	ctx := context.Background()
 
 	resp, err := berglas.Access(ctx, &berglas.AccessRequest{
-		Bucket: "sethvargo-oscon19-secrets",
+		Bucket: "sethvargo-devsecconseattle-19-secrets",
 		Object: obj,
 	})
 	if err != nil {

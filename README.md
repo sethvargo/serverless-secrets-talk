@@ -139,15 +139,15 @@ examples.
 1. Create a secret:
 
     ```text
-    $ berglas create sethvargo-oscon19-secrets/redis-pass super-secret... \
-        --key projects/sethvargo-oscon19/locations/global/keyRings/serverless/cryptoKeys/secrets
+    $ berglas create sethvargo-devsecconseattle-19-secrets/redis-pass super-secret... \
+        --key projects/sethvargo-devsecconseattle-19/locations/global/keyRings/serverless/cryptoKeys/secrets
     ```
 
 1. Grant our serverless app the ability to access the value:
 
     ```text
-    $ berglas grant "sethvargo-oscon19-secrets/redis-pass" \
-        --member "serviceAccount:myapp-sa@sethvargo-oscon19.iam.gserviceaccount.com"
+    $ berglas grant "sethvargo-devsecconseattle-19-secrets/redis-pass" \
+        --member "serviceAccount:myapp-sa@sethvargo-devsecconseattle-19.iam.gserviceaccount.com"
     ```
 
 1. Update our serverless app to pull from Berglas:
@@ -201,9 +201,9 @@ Vault is already running, we just need to configure it.
     ```text
     $ ./bin/vault write auth/gcp-serverless/role/myapp \
         type=iam \
-        project_id=sethvargo-oscon19 \
+        project_id=sethvargo-devsecconseattle-19 \
         policies=myapp-kv-read \
-        bound_service_accounts=myapp-sa@sethvargo-oscon19.iam.gserviceaccount.com \
+        bound_service_accounts=myapp-sa@sethvargo-devsecconseattle-19.iam.gserviceaccount.com \
         max_jwt_exp=60m
     ```
 

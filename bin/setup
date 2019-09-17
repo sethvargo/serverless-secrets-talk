@@ -16,7 +16,7 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-oscon19"
+PROJECT="sethvargo-devsecconseattle-19"
 
 gcloud services enable --project "${PROJECT}" \
   compute.googleapis.com \

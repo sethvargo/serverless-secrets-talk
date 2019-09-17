@@ -16,16 +16,17 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-oscon19"
+PROJECT="sethvargo-devsecconseattle-19"
 REDIS_HOST="$(gcloud compute instances describe myredis --project "${PROJECT}" --zone "us-central1-b" --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')"
 REDIS_PASS="super-secret"
 
 cd /Users/sethvargo/Development/serverless-secrets-talk/app
 
-gcloud builds submit \
-  --project "${PROJECT}" \
+docker build \
   --tag "gcr.io/${PROJECT}/myapp" \
   .
+
+docker push "gcr.io/${PROJECT}/myapp"
 
 gcloud alpha run deploy "myapp" \
   --project "${PROJECT}" \

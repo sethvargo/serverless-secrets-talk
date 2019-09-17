@@ -16,8 +16,9 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-oscon19"
+PROJECT="sethvargo-devsecconseattle-19"
 
+echo -n "Enter text to encrypt: "
 read str
 
 echo -n "${str}" | gcloud kms encrypt \

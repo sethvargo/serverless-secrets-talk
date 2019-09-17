@@ -15,12 +15,13 @@
 
 module "vault" {
   source         = "terraform-google-modules/vault/google"
-  project_id     = "sethvargo-oscon19"
+  project_id     = "sethvargo-devsecconseattle-19"
   region         = "us-central1"
   kms_keyring    = "vault"
   kms_crypto_key = "vault-init"
-  vault_version  = "1.1.3"
+  vault_version  = "1.2.2"
 
+  vault_instance_base_image    = "debian-cloud/debian-9"
   storage_bucket_force_destroy = "true"
 }
 

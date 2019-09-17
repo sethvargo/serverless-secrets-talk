@@ -16,6 +16,7 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+export DEBIAN_FRONTEND=noninteractive
 apt-get -yqq update
 apt-get -yqq upgrade
 

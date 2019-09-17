@@ -36,7 +36,7 @@ func kmsDecrypt(input string) (string, error) {
 	}
 
 	resp, err := client.Decrypt(ctx, &kmspb.DecryptRequest{
-		Name:       "projects/sethvargo-oscon19/locations/global/keyRings/serverless/cryptoKeys/secrets",
+		Name:       "projects/sethvargo-devsecconseattle-19/locations/global/keyRings/serverless/cryptoKeys/secrets",
 		Ciphertext: b,
 	})
 	if err != nil {

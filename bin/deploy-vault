@@ -16,13 +16,13 @@ set -eEu
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-oscon19"
+PROJECT="sethvargo-devsecconseattle-19"
 
 DIR="$(cd "$(dirname "$0")/../terraform"; pwd -P)"
 
 pushd "${DIR}" &>/dev/null
 
-terraform11 init && terraform11 apply -auto-approve
+terraform init && terraform apply -auto-approve
 
 SA_EMAIL="$(terraform output service_account_email)"
 
