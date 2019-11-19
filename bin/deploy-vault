@@ -16,8 +16,6 @@ set -eEu
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-devsecconseattle-19"
-
 DIR="$(cd "$(dirname "$0")/../terraform"; pwd -P)"
 
 pushd "${DIR}" &>/dev/null
@@ -52,15 +50,15 @@ vault auth list 2>&1 | grep -q "gcp-serverless" || {
     gcp
 }
 
-gcloud iam service-accounts list --project "${PROJECT}" 2>&1 | grep -q "vault-verifier" || {
+gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep -q "vault-verifier" || {
   gcloud iam service-accounts create "vault-verifier" \
-    --project "${PROJECT}"
+    --project "${PROJECT_ID}"
 
-  gcloud projects add-iam-policy-binding ${PROJECT} \
-    --member "serviceAccount:vault-verifier@${PROJECT}.iam.gserviceaccount.com" \
+  gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member "serviceAccount:vault-verifier@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role "roles/iam.serviceAccountUser"
 
-  SA_KEY="$(gcloud iam service-accounts keys create - --iam-account=vault-verifier@${PROJECT}.iam.gserviceaccount.com)"
+  SA_KEY="$(gcloud iam service-accounts keys create - --iam-account=vault-verifier@${PROJECT_ID}.iam.gserviceaccount.com)"
 
   vault write auth/gcp-serverless/config \
       credentials="${SA_KEY}"

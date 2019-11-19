@@ -18,13 +18,21 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 
 	cloudkms "cloud.google.com/go/kms/apiv1"
+	"github.com/pkg/errors"
 	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
 )
 
 func kmsDecrypt(input string) (string, error) {
 	ctx := context.Background()
+
+	projectID, err := valueFromMetadata(ctx, "project/project-id")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get project ID")
+	}
+
 	client, err := cloudkms.NewKeyManagementClient(ctx)
 	if err != nil {
 		return "", err
@@ -36,7 +44,7 @@ func kmsDecrypt(input string) (string, error) {
 	}
 
 	resp, err := client.Decrypt(ctx, &kmspb.DecryptRequest{
-		Name:       "projects/sethvargo-devsecconseattle-19/locations/global/keyRings/serverless/cryptoKeys/secrets",
+		Name:       fmt.Sprintf("projects/%s/locations/global/keyRings/serverless/cryptoKeys/secrets", projectID),
 		Ciphertext: b,
 	})
 	if err != nil {

@@ -16,13 +16,11 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-devsecconseattle-19"
-
 echo -n "Enter text to encrypt: "
 read str
 
 echo -n "${str}" | gcloud kms encrypt \
-  --key "projects/${PROJECT}/locations/global/keyRings/serverless/cryptoKeys/secrets" \
+  --key "projects/${PROJECT_ID}/locations/global/keyRings/serverless/cryptoKeys/secrets" \
   --plaintext-file=- \
   --ciphertext-file=- \
   | base64

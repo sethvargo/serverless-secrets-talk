@@ -15,7 +15,7 @@
 
 module "vault" {
   source         = "terraform-google-modules/vault/google"
-  project_id     = "sethvargo-devsecconseattle-19"
+  project_id     = "${var.project_id}"
   region         = "us-central1"
   kms_keyring    = "vault"
   kms_crypto_key = "vault-init"

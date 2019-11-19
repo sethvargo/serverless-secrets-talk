@@ -17,15 +17,22 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/GoogleCloudPlatform/berglas/pkg/berglas"
+	"github.com/pkg/errors"
 )
 
 func berglasAccess(obj string) (string, error) {
 	ctx := context.Background()
 
+	projectID, err := valueFromMetadata(ctx, "project/project-id")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get project ID")
+	}
+
 	resp, err := berglas.Access(ctx, &berglas.AccessRequest{
-		Bucket: "sethvargo-devsecconseattle-19-secrets",
+		Bucket: fmt.Sprintf("%s-secrets", projectID),
 		Object: obj,
 	})
 	if err != nil {

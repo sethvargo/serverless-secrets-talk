@@ -16,7 +16,10 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -24,7 +27,11 @@ import (
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/pkg/errors"
 	_ "github.com/sethvargo/go-malice"
+	"golang.org/x/oauth2/google"
+	"google.golang.org/api/googleapi"
+	"google.golang.org/api/iam/v1"
 )
 
 var (
@@ -141,4 +148,35 @@ func getEnvOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func valueFromMetadata(ctx context.Context, path string) (string, error) {
+	client, err := google.DefaultClient(ctx, iam.CloudPlatformScope)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create http client")
+	}
+
+	u := "http://metadata.google.internal/computeMetadata/v1/" + path
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to create request")
+	}
+	req = req.WithContext(ctx)
+	req.Header.Set("Metadata-Flavor", "Google")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to execute request")
+	}
+	defer resp.Body.Close()
+
+	if err := googleapi.CheckResponse(resp); err != nil {
+		return "", err
+	}
+
+	var b bytes.Buffer
+	if _, err := io.Copy(&b, resp.Body); err != nil {
+		return "", errors.Wrap(err, "failed to copy body")
+	}
+	return b.String(), nil
 }

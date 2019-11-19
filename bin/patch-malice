@@ -17,7 +17,7 @@ set -eEuo pipefail
 # limitations under the License.
 
 MALICE_ENDPOINT="$(gcloud alpha run services describe "malice-server" \
-  --project "sethvargo-devsecconseattle-19" \
+  --project "${PROJECT_ID}" \
   --region "us-central1" \
   --platform "managed" \
   --format 'value(status.address.url)')"

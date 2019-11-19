@@ -136,18 +136,24 @@ access, permissions, and logging.
 We'll use [berglas](https://github.com/GoogleCloudPlatform/berglas) for these
 examples.
 
+1. Export environment:
+
+    ```text
+    $ export PROJECT_ID="..."
+    ```
+
 1. Create a secret:
 
     ```text
-    $ berglas create sethvargo-devsecconseattle-19-secrets/redis-pass super-secret... \
-        --key projects/sethvargo-devsecconseattle-19/locations/global/keyRings/serverless/cryptoKeys/secrets
+    $ berglas create ${PROJECT_ID}-secrets/redis-pass super-secret... \
+        --key projects/${PROJECT_ID}/locations/global/keyRings/serverless/cryptoKeys/secrets
     ```
 
 1. Grant our serverless app the ability to access the value:
 
     ```text
-    $ berglas grant "sethvargo-devsecconseattle-19-secrets/redis-pass" \
-        --member "serviceAccount:myapp-sa@sethvargo-devsecconseattle-19.iam.gserviceaccount.com"
+    $ berglas grant "${PROJECT_ID}-secrets/redis-pass" \
+        --member "serviceAccount:myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com"
     ```
 
 1. Update our serverless app to pull from Berglas:
@@ -201,9 +207,9 @@ Vault is already running, we just need to configure it.
     ```text
     $ ./bin/vault write auth/gcp-serverless/role/myapp \
         type=iam \
-        project_id=sethvargo-devsecconseattle-19 \
+        project_id=${PROJECT_ID} \
         policies=myapp-kv-read \
-        bound_service_accounts=myapp-sa@sethvargo-devsecconseattle-19.iam.gserviceaccount.com \
+        bound_service_accounts=myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com \
         max_jwt_exp=60m
     ```
 

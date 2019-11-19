@@ -16,9 +16,7 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-devsecconseattle-19"
-
-gcloud services enable --project "${PROJECT}" \
+gcloud services enable --project "${PROJECT_ID}" \
   compute.googleapis.com \
   cloudbuild.googleapis.com \
   cloudkms.googleapis.com \
@@ -26,9 +24,9 @@ gcloud services enable --project "${PROJECT}" \
   storage-component.googleapis.com \
   run.googleapis.com
 
-gcloud compute instances list --project "${PROJECT}" 2>&1 | grep -q "myredis" || {
+gcloud compute instances list --project "${PROJECT_ID}" 2>&1 | grep -q "myredis" || {
   gcloud compute instances create "myredis" \
-    --project "${PROJECT}" \
+    --project "${PROJECT_ID}" \
     --zone "us-central1-b" \
     --machine-type "n1-highmem-8" \
     --tags "redis" \
@@ -37,50 +35,54 @@ gcloud compute instances list --project "${PROJECT}" 2>&1 | grep -q "myredis" ||
     --metadata-from-file "startup-script=scripts/install-redis.sh"
 }
 
-gcloud compute firewall-rules list --project "${PROJECT}" 2>&1 | grep -q "redis-fw" || {
+gcloud compute firewall-rules list --project "${PROJECT_ID}" 2>&1 | grep -q "redis-fw" || {
   gcloud compute firewall-rules create "redis-fw" \
-    --project "${PROJECT}" \
+    --project "${PROJECT_ID}" \
     --action "allow" \
     --target-tags "redis" \
     --source-ranges "0.0.0.0/0" \
     --rules "tcp:6379"
 }
 
-gcloud kms keyrings list --location "global" --project "${PROJECT}" 2>&1 | grep -q "serverless" || {
+gcloud kms keyrings list --location "global" --project "${PROJECT_ID}" 2>&1 | grep -q "serverless" || {
   gcloud kms keyrings create "serverless" \
-    --project "${PROJECT}" \
+    --project "${PROJECT_ID}" \
     --location "global"
 }
 
-gcloud kms keys list --keyring "serverless" --location "global" --project "${PROJECT}" 2>&1 | grep -q "secrets" || {
+gcloud kms keys list --keyring "serverless" --location "global" --project "${PROJECT_ID}" 2>&1 | grep -q "secrets" || {
   gcloud kms keys create "secrets" \
-    --project "${PROJECT}" \
+    --project "${PROJECT_ID}" \
     --keyring "serverless" \
     --location "global" \
     --purpose "encryption"
 }
 
-gcloud iam service-accounts list --project "${PROJECT}" 2>&1 | grep -q "myapp-sa" || {
+gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep -q "myapp-sa" || {
   gcloud iam service-accounts create "myapp-sa" \
-    --project "${PROJECT}" \
+    --project "${PROJECT_ID}" \
     --display-name "myapp-sa"
 
   gcloud kms keys add-iam-policy-binding "secrets" \
-    --project "${PROJECT}" \
+    --project "${PROJECT_ID}" \
     --keyring "serverless" \
     --location "global" \
-    --member "serviceAccount:myapp-sa@${PROJECT}.iam.gserviceaccount.com" \
+    --member "serviceAccount:myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role "roles/cloudkms.cryptoKeyEncrypterDecrypter"
 }
 
-gsutil -q ls -b -p "${PROJECT}" 2>&1 | grep -q "${PROJECT}-secrets" || {
+gsutil -q ls -b -p "${PROJECT_ID}" 2>&1 | grep -q "${PROJECT_ID}-secrets" || {
   berglas bootstrap \
-    --project ${PROJECT} \
-    --bucket "${PROJECT}-secrets" \
+    --project ${PROJECT_ID} \
+    --bucket "${PROJECT_ID}-secrets" \
     --kms-key "secrets" \
     --kms-keyring "serverless" \
     --kms-location "global"
 }
+
+cat > ${DIR}/terraform/variables.tf <<EOF
+project_id = "${PROJECT_ID}"
+EOF
 
 DIR="$(cd "$(dirname "$0")"; pwd -P)"
 ${DIR}/deploy-vault

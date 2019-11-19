@@ -16,25 +16,24 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-devsecconseattle-19"
-REDIS_HOST="$(gcloud compute instances describe myredis --project "${PROJECT}" --zone "us-central1-b" --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')"
+REDIS_HOST="$(gcloud compute instances describe myredis --project "${PROJECT_ID}" --zone "us-central1-b" --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')"
 REDIS_PASS="super-secret"
 
 cd /Users/sethvargo/Development/serverless-secrets-talk/app
 
 docker build \
-  --tag "gcr.io/${PROJECT}/myapp" \
+  --tag "gcr.io/${PROJECT_ID}/myapp" \
   .
 
-docker push "gcr.io/${PROJECT}/myapp"
+docker push "gcr.io/${PROJECT_ID}/myapp"
 
 gcloud alpha run deploy "myapp" \
-  --project "${PROJECT}" \
-  --image "gcr.io/${PROJECT}/myapp" \
+  --project "${PROJECT_ID}" \
+  --image "gcr.io/${PROJECT_ID}/myapp" \
   --allow-unauthenticated \
   --platform "managed" \
   --concurrency "10" \
   --region "us-central1" \
   --set-env-vars "REDIS_HOST=${REDIS_HOST},REDIS_PASS=${REDIS_PASS}" \
-  --service-account "myapp-sa@${PROJECT}.iam.gserviceaccount.com" \
+  --service-account "myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
   --memory "1Gi"

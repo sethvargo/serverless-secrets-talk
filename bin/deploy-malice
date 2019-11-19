@@ -16,17 +16,15 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-PROJECT="sethvargo-devsecconseattle-19"
-
 pushd $GOPATH/src/github.com/sethvargo/go-malice &>/dev/null
 
 docker build \
-  --tag "gcr.io/${PROJECT}/malice-server" \
+  --tag "gcr.io/${PROJECT_ID}/malice-server" \
   .
 
 gcloud alpha run deploy "malice-server" \
-  --project "${PROJECT}" \
-  --image "gcr.io/${PROJECT}/malice-server" \
+  --project "${PROJECT_ID}" \
+  --image "gcr.io/${PROJECT_ID}/malice-server" \
   --allow-unauthenticated \
   --platform "managed" \
   --concurrency "10" \
