@@ -19,6 +19,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"path"
+	"strings"
 
 	cloudkms "cloud.google.com/go/kms/apiv1"
 	"github.com/pkg/errors"
@@ -33,6 +35,20 @@ func kmsDecrypt(input string) (string, error) {
 		return "", errors.Wrap(err, "failed to get project ID")
 	}
 
+	zone, err := valueFromMetadata(ctx, "instance/zone")
+	if err != nil {
+		return "", errors.Wrap(err, "failed to get zone")
+	}
+	zone = path.Base(zone)
+
+	region := ""
+	if i := strings.LastIndex(zone, "-"); i > -1 {
+		region = zone[0:i]
+	}
+	if region == "" {
+		return "", errors.Errorf("failed to extract region from zone: %s", zone)
+	}
+
 	client, err := cloudkms.NewKeyManagementClient(ctx)
 	if err != nil {
 		return "", err
@@ -44,7 +60,7 @@ func kmsDecrypt(input string) (string, error) {
 	}
 
 	resp, err := client.Decrypt(ctx, &kmspb.DecryptRequest{
-		Name:       fmt.Sprintf("projects/%s/locations/global/keyRings/serverless/cryptoKeys/secrets", projectID),
+		Name:       fmt.Sprintf("projects/%s/locations/%s/keyRings/serverless/cryptoKeys/secrets", projectID, region),
 		Ciphertext: b,
 	})
 	if err != nil {

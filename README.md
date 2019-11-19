@@ -4,11 +4,21 @@ This repository has the code samples and setup scripts for my live-demo of how
 to manage secrets in serverless environments.
 
 
+
 ## Setup
 
-```text
-$ ./bin/setup
-```
+1. Export environment:
+
+    ```sh
+    export PROJECT_ID="..."
+    export REGION="..."
+    ```
+
+1. Run setup:
+
+    ```text
+    $ ./bin/setup
+    ```
 
 ## Demo
 
@@ -136,17 +146,11 @@ access, permissions, and logging.
 We'll use [berglas](https://github.com/GoogleCloudPlatform/berglas) for these
 examples.
 
-1. Export environment:
-
-    ```text
-    $ export PROJECT_ID="..."
-    ```
-
 1. Create a secret:
 
     ```text
-    $ berglas create ${PROJECT_ID}-secrets/redis-pass super-secret... \
-        --key projects/${PROJECT_ID}/locations/global/keyRings/serverless/cryptoKeys/secrets
+    $ berglas create ${PROJECT_ID}/redis-pass super-secret... \
+        --key projects/${PROJECT_ID}/locations/${REGION}/keyRings/serverless/cryptoKeys/secrets
     ```
 
 1. Grant our serverless app the ability to access the value:

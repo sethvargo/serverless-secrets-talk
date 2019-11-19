@@ -80,7 +80,8 @@ const (
 
 		<p style="font-size: smaller;">
 			You are seeing this information because you are running in non-production
-			mode. Set <tt>ENV=production</tt> to disable detailed error pages.
+			mode. Set <tt>ENV=production</tt> to disable detailed error pages. You
+			can also <a href="/reset-counter?count=0">reset the counter</a>.
 		</p>
 	</body>
 </html>

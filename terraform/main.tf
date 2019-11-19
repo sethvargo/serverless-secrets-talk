@@ -13,26 +13,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+provider "google" {
+  project_id = var.project_id
+}
+
 module "vault" {
   source         = "terraform-google-modules/vault/google"
-  project_id     = "${var.project_id}"
-  region         = "us-central1"
+  project_id     = var.project_id
+  region         = var.region
   kms_keyring    = "vault"
   kms_crypto_key = "vault-init"
-  vault_version  = "1.2.2"
+  vault_version  = "1.3.0"
 
   vault_instance_base_image    = "debian-cloud/debian-9"
   storage_bucket_force_destroy = "true"
 }
 
 output "vault_addr" {
-  value = "${module.vault.vault_addr}"
+  value = module.vault.vault_addr
 }
 
 output "service_account_email" {
-  value = "${module.vault.service_account_email}"
+  value = module.vault.service_account_email
 }
 
 output "ca_cert_pem" {
-  value = "${module.vault.ca_cert_pem[0]}"
+  value = module.vault.ca_cert_pem[0]
 }

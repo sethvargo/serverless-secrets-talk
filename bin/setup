@@ -24,10 +24,10 @@ gcloud services enable --project "${PROJECT_ID}" \
   storage-component.googleapis.com \
   run.googleapis.com
 
-gcloud compute instances list --project "${PROJECT_ID}" 2>&1 | grep -q "myredis" || {
+gcloud compute instances list --project "${PROJECT_ID}" 2>&1 | grep "myredis" || {
   gcloud compute instances create "myredis" \
     --project "${PROJECT_ID}" \
-    --zone "us-central1-b" \
+    --zone "${REGION}-b" \
     --machine-type "n1-highmem-8" \
     --tags "redis" \
     --image-family "debian-9" \
@@ -35,7 +35,7 @@ gcloud compute instances list --project "${PROJECT_ID}" 2>&1 | grep -q "myredis"
     --metadata-from-file "startup-script=scripts/install-redis.sh"
 }
 
-gcloud compute firewall-rules list --project "${PROJECT_ID}" 2>&1 | grep -q "redis-fw" || {
+gcloud compute firewall-rules list --project "${PROJECT_ID}" 2>&1 | grep "redis-fw" || {
   gcloud compute firewall-rules create "redis-fw" \
     --project "${PROJECT_ID}" \
     --action "allow" \
@@ -44,21 +44,21 @@ gcloud compute firewall-rules list --project "${PROJECT_ID}" 2>&1 | grep -q "red
     --rules "tcp:6379"
 }
 
-gcloud kms keyrings list --location "global" --project "${PROJECT_ID}" 2>&1 | grep -q "serverless" || {
+gcloud kms keyrings list --location "${REGION}" --project "${PROJECT_ID}" 2>&1 | grep "serverless" || {
   gcloud kms keyrings create "serverless" \
     --project "${PROJECT_ID}" \
-    --location "global"
+    --location "${REGION}"
 }
 
-gcloud kms keys list --keyring "serverless" --location "global" --project "${PROJECT_ID}" 2>&1 | grep -q "secrets" || {
+gcloud kms keys list --keyring "serverless" --location "${REGION}" --project "${PROJECT_ID}" 2>&1 | grep "secrets" || {
   gcloud kms keys create "secrets" \
     --project "${PROJECT_ID}" \
     --keyring "serverless" \
-    --location "global" \
+    --location "${REGION}" \
     --purpose "encryption"
 }
 
-gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep -q "myapp-sa" || {
+gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep "myapp-sa" || {
   gcloud iam service-accounts create "myapp-sa" \
     --project "${PROJECT_ID}" \
     --display-name "myapp-sa"
@@ -66,24 +66,26 @@ gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep -q "myapp
   gcloud kms keys add-iam-policy-binding "secrets" \
     --project "${PROJECT_ID}" \
     --keyring "serverless" \
-    --location "global" \
+    --location "${REGION}" \
     --member "serviceAccount:myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role "roles/cloudkms.cryptoKeyEncrypterDecrypter"
 }
 
-gsutil -q ls -b -p "${PROJECT_ID}" 2>&1 | grep -q "${PROJECT_ID}-secrets" || {
+gsutil -q ls -b -p "${PROJECT_ID}" 2>&1 | grep "${PROJECT_ID}-secrets" || {
   berglas bootstrap \
     --project ${PROJECT_ID} \
     --bucket "${PROJECT_ID}-secrets" \
     --kms-key "secrets" \
     --kms-keyring "serverless" \
-    --kms-location "global"
+    --kms-location "${REGION}"
 }
 
-cat > ${DIR}/terraform/variables.tf <<EOF
+DIR="$(cd "$(dirname "$0")"; pwd -P)"
+
+cat > "${DIR}/../terraform/terraform.tfvars" <<EOF
 project_id = "${PROJECT_ID}"
+region = "${REGION}"
 EOF
 
-DIR="$(cd "$(dirname "$0")"; pwd -P)"
 ${DIR}/deploy-vault
 ${DIR}/deploy-malice

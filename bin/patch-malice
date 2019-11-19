@@ -18,7 +18,7 @@ set -eEuo pipefail
 
 MALICE_ENDPOINT="$(gcloud alpha run services describe "malice-server" \
   --project "${PROJECT_ID}" \
-  --region "us-central1" \
+  --region "${REGION}" \
   --platform "managed" \
   --format 'value(status.address.url)')"
 

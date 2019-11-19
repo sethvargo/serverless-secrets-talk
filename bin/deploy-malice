@@ -22,13 +22,15 @@ docker build \
   --tag "gcr.io/${PROJECT_ID}/malice-server" \
   .
 
+docker push "gcr.io/${PROJECT_ID}/malice-server"
+
 gcloud alpha run deploy "malice-server" \
   --project "${PROJECT_ID}" \
   --image "gcr.io/${PROJECT_ID}/malice-server" \
   --allow-unauthenticated \
   --platform "managed" \
   --concurrency "10" \
-  --region "us-central1" \
+  --region "${REGION}" \
   --memory "1Gi"
 
 popd &>/dev/null

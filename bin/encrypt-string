@@ -20,7 +20,7 @@ echo -n "Enter text to encrypt: "
 read str
 
 echo -n "${str}" | gcloud kms encrypt \
-  --key "projects/${PROJECT_ID}/locations/global/keyRings/serverless/cryptoKeys/secrets" \
+  --key "projects/${PROJECT_ID}/locations/${REGION}/keyRings/serverless/cryptoKeys/secrets" \
   --plaintext-file=- \
   --ciphertext-file=- \
   | base64

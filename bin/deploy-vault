@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -eEu
+set -eEuo pipefail
 
 # Copyright 2019 Seth Vargo
 # Copyright 2019 Google, Inc.
@@ -31,6 +31,8 @@ while [[ "$(vault status 2>&1)" =~ "connection refused" ]]; do
   sleep 5
 done
 
+sleep 300
+
 vault operator init -status &>/dev/null || {
   vault operator init \
     -key-shares 1 \
@@ -41,7 +43,7 @@ vault operator init -status &>/dev/null || {
 
 export VAULT_TOKEN="$(cat init.json | jq -r .root_token)"
 
-vault auth list 2>&1 | grep -q "gcp-serverless" || {
+vault auth list 2>&1 | grep "gcp-serverless" || {
   vault auth enable \
     -path gcp-serverless \
     -default-lease-ttl 5m \
@@ -50,7 +52,9 @@ vault auth list 2>&1 | grep -q "gcp-serverless" || {
     gcp
 }
 
-gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep -q "vault-verifier" || {
+sleep 60
+
+gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep "vault-verifier" || {
   gcloud iam service-accounts create "vault-verifier" \
     --project "${PROJECT_ID}"
 
