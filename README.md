@@ -75,7 +75,7 @@ to manage secrets in serverless environments.
 
     ```text
     telnet <IP> 6379
-    > AUTH super-secret...
+    > AUTH super-secret
 
     > PING
 
@@ -102,7 +102,7 @@ Let's encrypt those envvars!
 1. Encrypt our plaintext value with a KMS provider:
 
     ```text
-    $ ./bin/encrypt-string super-secret...
+    $ ./bin/encrypt-string super-secret
     ```
 
 1. Edit the deployment script to send in the encrypted value:
