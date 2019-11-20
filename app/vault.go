@@ -29,6 +29,10 @@ import (
 var vaultAddr = os.Getenv("VAULT_ADDR")
 
 func vaultAccess(name string) (string, error) {
+	if vaultAddr == "" {
+		return "", fmt.Errorf("missing VAULT_ADDR")
+	}
+
 	vaultToken, err := vaultLogin()
 	if err != nil {
 		return "", err
