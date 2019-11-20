@@ -121,8 +121,6 @@ Let's encrypt those envvars!
       if err != nil {
         panic(err)
       }
-
-      # ...
     }
     ```
 
@@ -199,14 +197,8 @@ Vault is already running, we just need to configure it.
     }
     ```
 
-1. Add `VAULT_ADDR` to function deployment:
+1. Deploy app.
 
     ```text
-    (cd terraform && terraform output vault_addr)
-    ```
-
-    ```text
-    VAULT_ADDR="..."
-
-    --set-env-vars="VAULT_ADDR="${VAULT_ADDR}..."
+    $ ./bin/deploy-app
     ```
