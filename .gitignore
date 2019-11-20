@@ -17,3 +17,4 @@ terraform/.terraform
 terraform/*.tfstate*
 terraform/init.json
 terraform/ca.crt
+terraform/terraform.tfvars
