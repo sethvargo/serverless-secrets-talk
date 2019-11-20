@@ -16,6 +16,7 @@ set -eEuo pipefail
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+VAULT_ADDR="$(cd terraform && terraform output vault_addr)"
 REDIS_HOST="$(gcloud compute instances describe myredis --project "${PROJECT_ID}" --zone "${REGION}-b" --format 'value(networkInterfaces[0].accessConfigs[0].natIP)')"
 REDIS_PASS="super-secret"
 
@@ -34,6 +35,6 @@ gcloud alpha run deploy "myapp" \
   --platform "managed" \
   --concurrency "10" \
   --region "${REGION}" \
-  --set-env-vars "REDIS_HOST=${REDIS_HOST},REDIS_PASS=${REDIS_PASS}" \
+  --set-env-vars "REDIS_HOST=${REDIS_HOST},REDIS_PASS=${REDIS_PASS},VAULT_ADDR=${VAULT_ADDR}" \
   --service-account "myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
   --memory "1Gi"
