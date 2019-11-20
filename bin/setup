@@ -62,14 +62,14 @@ gcloud iam service-accounts list --project "${PROJECT_ID}" 2>&1 | grep "myapp-sa
   gcloud iam service-accounts create "myapp-sa" \
     --project "${PROJECT_ID}" \
     --display-name "myapp-sa"
-
-  gcloud kms keys add-iam-policy-binding "secrets" \
-    --project "${PROJECT_ID}" \
-    --keyring "serverless" \
-    --location "${REGION}" \
-    --member "serviceAccount:myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role "roles/cloudkms.cryptoKeyEncrypterDecrypter"
 }
+
+gcloud kms keys add-iam-policy-binding "secrets" \
+  --project "${PROJECT_ID}" \
+  --keyring "serverless" \
+  --location "${REGION}" \
+  --member "serviceAccount:myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role "roles/cloudkms.cryptoKeyEncrypterDecrypter"
 
 gsutil -q ls -b -p "${PROJECT_ID}" 2>&1 | grep "${PROJECT_ID}-secrets" || {
   berglas bootstrap \
