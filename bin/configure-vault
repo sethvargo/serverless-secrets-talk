@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -eEuo pipefail
+
+# Copyright 2019 Seth Vargo
+# Copyright 2019 Google, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#      http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+DIR="$(cd "$(dirname "$0")"; pwd -P)"
+
+
+${DIR}/vault secrets list | grep "kv/" || {
+  ${DIR}/vault secrets enable -version=2 kv
+}
+
+${DIR}/vault kv put kv/myapp/redis-pass \
+  value=super-secret
+
+${DIR}/vault policy write myapp-kv-read ./scripts/vault-policy.hcl
+
+${DIR}/vault write auth/gcp-serverless/role/myapp \
+  type=iam \
+  project_id=${PROJECT_ID} \
+  policies=myapp-kv-read \
+  bound_service_accounts=myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com \
+  max_jwt_exp=60m

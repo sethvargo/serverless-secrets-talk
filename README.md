@@ -146,18 +146,10 @@ access, permissions, and logging.
 We'll use [berglas](https://github.com/GoogleCloudPlatform/berglas) for these
 examples.
 
-1. Create a secret:
+1. Create a secret and grant permissions:
 
     ```text
-    $ berglas create ${PROJECT_ID}/redis-pass super-secret... \
-        --key projects/${PROJECT_ID}/locations/${REGION}/keyRings/serverless/cryptoKeys/secrets
-    ```
-
-1. Grant our serverless app the ability to access the value:
-
-    ```text
-    $ berglas grant "${PROJECT_ID}-secrets/redis-pass" \
-        --member "serviceAccount:myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com"
+    $ ./bin/create-secret
     ```
 
 1. Update our serverless app to pull from Berglas:
@@ -188,33 +180,10 @@ examples.
 
 Vault is already running, we just need to configure it.
 
-1. Enable Vault's KV secret engine:
+1. Configure Vault:
 
     ```text
-    $ ./bin/vault secrets enable -version=2 kv
-    ```
-
-1. Create our secret in Vault:
-
-    ```text
-    $ ./bin/vault kv put kv/myapp/redis-pass value=super-secret...
-    ```
-
-1. Create a policy granting access to our secret:
-
-    ```text
-    $ ./bin/vault policy write myapp-kv-read ./scripts/vault-policy.hcl
-    ```
-
-1. Allow serverless app to auth to Vault:
-
-    ```text
-    $ ./bin/vault write auth/gcp-serverless/role/myapp \
-        type=iam \
-        project_id=${PROJECT_ID} \
-        policies=myapp-kv-read \
-        bound_service_accounts=myapp-sa@${PROJECT_ID}.iam.gserviceaccount.com \
-        max_jwt_exp=60m
+    $ ./bin/configure-vault
     ```
 
 1. Demo `vault.go` code.
