@@ -49,7 +49,7 @@ type app struct {
 }
 
 func main() {
-	redisPass, err := kmsDecrypt(redisPass)
+	redisPass, err := accessSecret(redisPass)
 	if err != nil {
 		panic(err)
 	}

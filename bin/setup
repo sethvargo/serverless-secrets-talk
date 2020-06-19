@@ -20,6 +20,7 @@ gcloud services enable --project "${PROJECT_ID}" \
   compute.googleapis.com \
   cloudbuild.googleapis.com \
   cloudkms.googleapis.com \
+  secretmanager.googleapis.com \
   storage-api.googleapis.com \
   storage-component.googleapis.com \
   run.googleapis.com

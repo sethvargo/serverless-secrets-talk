@@ -18,6 +18,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	secretmanagerpb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
@@ -43,5 +44,5 @@ func accessSecret(obj string) (string, error) {
 		return "", err
 	}
 
-	return string(resp.Payload.Data), nil
+	return strings.TrimSpace(string(resp.Payload.Data)), nil
 }
