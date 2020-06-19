@@ -17,9 +17,14 @@ package berglas
 import (
 	"context"
 	"os"
+	"runtime"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
+
+// chmodSupported indicates whether the OS supports chmod
+const chmodSupported = runtime.GOOS != "windows" && runtime.GOOS != "plan9"
 
 // Resolve parses and extracts a berglas reference. See Client.Resolve for more
 // details and examples.
@@ -34,27 +39,51 @@ func Resolve(ctx context.Context, s string) ([]byte, error) {
 // Resolve parses and extracts a berglas reference. The result is the plaintext
 // secrets contents, or a path to the decrypted contents on disk.
 func (c *Client) Resolve(ctx context.Context, s string) ([]byte, error) {
+	logger := c.Logger().WithFields(logrus.Fields{
+		"reference": s,
+	})
+
+	logger.Debug("resolve.start")
+	defer logger.Debug("resolve.finish")
+
 	ref, err := ParseReference(s)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed to parse reference %s", s)
 	}
 
-	plaintext, err := c.Access(ctx, &AccessRequest{
-		Bucket: ref.Bucket(),
-		Object: ref.Object(),
-	})
+	var req accessRequest
+	switch ref.Type() {
+	case ReferenceTypeSecretManager:
+		req = &SecretManagerAccessRequest{
+			Project: ref.Project(),
+			Name:    ref.Name(),
+			Version: ref.Version(),
+		}
+	case ReferenceTypeStorage:
+		req = &StorageAccessRequest{
+			Bucket:     ref.Bucket(),
+			Object:     ref.Object(),
+			Generation: ref.Generation(),
+		}
+	}
+
+	plaintext, err := c.Access(ctx, req)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed to access secret %s/%s", ref.Bucket(), ref.Object())
+		return nil, errors.Wrapf(err, "failed to access secret %s", ref.String())
 	}
 
 	if pth := ref.Filepath(); pth != "" {
+		logger.WithField("filepath", pth).Debug("writing to filepath")
+
 		f, err := os.OpenFile(ref.Filepath(), os.O_RDWR|os.O_CREATE, 0600)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to open filepath %s", pth)
 		}
 
-		if err := f.Chmod(0600); err != nil {
-			return nil, errors.Wrapf(err, "failed to chmod filepath %s", pth)
+		if chmodSupported {
+			if err := f.Chmod(0600); err != nil {
+				return nil, errors.Wrapf(err, "failed to chmod filepath %s", pth)
+			}
 		}
 
 		if _, err := f.Write(plaintext); err != nil {
@@ -74,30 +103,4 @@ func (c *Client) Resolve(ctx context.Context, s string) ([]byte, error) {
 	}
 
 	return plaintext, nil
-}
-
-// Replace parses a berglas reference and replaces it. See Client.Replace for
-// more details and examples.
-func Replace(ctx context.Context, key string) error {
-	client, err := New(ctx)
-	if err != nil {
-		return err
-	}
-	return client.Replace(ctx, key)
-}
-
-// Replace parses a berglas reference from the environment variable at the
-// given environment variable name. If parsing and extraction is successful,
-// this function replaces the value of the environment variable to the resolved
-// secret reference.
-func (c *Client) Replace(ctx context.Context, key string) error {
-	plaintext, err := c.Resolve(ctx, os.Getenv(key))
-	if err != nil {
-		return err
-	}
-
-	if err := os.Setenv(key, string(plaintext)); err != nil {
-		return errors.Wrapf(err, "failed to set %s", key)
-	}
-	return nil
 }

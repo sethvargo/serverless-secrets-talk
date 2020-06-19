@@ -40,14 +40,14 @@ func vaultAccess(name string) (string, error) {
 
 	req, err := http.NewRequest(http.MethodGet, vaultAddr+"/v1/"+name, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create access request: %s", err)
+		return "", fmt.Errorf("failed to create access request: %w", err)
 	}
 	req.Header.Add("x-vault-token", vaultToken)
 
 	client := insecureHTTPClient()
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute access: %s", err)
+		return "", fmt.Errorf("failed to execute access: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -108,12 +108,12 @@ func vaultLogin() (string, error) {
 
 	req, err = http.NewRequest(http.MethodPost, vaultAddr+"/v1/auth/gcp-serverless/login", j)
 	if err != nil {
-		return "", fmt.Errorf("failed to make vault login request: %s", err)
+		return "", fmt.Errorf("failed to make vault login request: %w", err)
 	}
 
 	resp, err = client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("failed to execute vault login: %s", err)
+		return "", fmt.Errorf("failed to execute vault login: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -122,7 +122,7 @@ func vaultLogin() (string, error) {
 		if _, err := io.Copy(&b, resp.Body); err != nil {
 			return "", err
 		}
-		return "", fmt.Errorf("bad response from vault login: %s", b.String())
+		return "", fmt.Errorf("bad response from vault login: %w", b.String())
 	}
 
 	s := struct {
@@ -132,7 +132,7 @@ func vaultLogin() (string, error) {
 	}{}
 
 	if err := json.NewDecoder(resp.Body).Decode(&s); err != nil {
-		return "", fmt.Errorf("failed to decode vault login response: %s", err)
+		return "", fmt.Errorf("failed to decode vault login response: %w", err)
 	}
 
 	return s.Auth.ClientToken, nil

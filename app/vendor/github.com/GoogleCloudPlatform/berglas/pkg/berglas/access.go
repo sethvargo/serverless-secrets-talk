@@ -16,18 +16,57 @@ package berglas
 
 import (
 	"context"
-	"encoding/base64"
-	"io/ioutil"
-	"strings"
+	"fmt"
 
-	"cloud.google.com/go/storage"
 	"github.com/pkg/errors"
-	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
+	"github.com/sirupsen/logrus"
+
+	secretspb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	grpccodes "google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
+
+type accessRequest interface {
+	isAccessRequest()
+}
+
+// StorageAccessRequest is used as input to access a secret from Cloud Storage
+// encrypted with Cloud KMS.
+type StorageAccessRequest struct {
+	// Bucket is the name of the bucket where the secret lives.
+	Bucket string
+
+	// Object is the name of the object in Cloud Storage.
+	Object string
+
+	// Generation of the object to fetch
+	Generation int64
+}
+
+func (r *StorageAccessRequest) isAccessRequest() {}
+
+// AccessRequest is an alias for StorageAccessRequest for
+// backwards-compatability. New clients should use StorageAccessRequest.
+type AccessRequest = StorageAccessRequest
+
+// SecretManagerAccessRequest is used as input to access a secret from Secret
+// Manager.
+type SecretManagerAccessRequest struct {
+	// Project is the ID or number of the project from which to access secrets.
+	Project string
+
+	// Name is the name of the secret to access.
+	Name string
+
+	// Version is the version of the secret to access.
+	Version string
+}
+
+func (r *SecretManagerAccessRequest) isAccessRequest() {}
 
 // Access is a top-level package function for accessing a secret. For large
 // volumes of secrets, please create a client instead.
-func Access(ctx context.Context, i *AccessRequest) ([]byte, error) {
+func Access(ctx context.Context, i accessRequest) ([]byte, error) {
 	client, err := New(ctx)
 	if err != nil {
 		return nil, err
@@ -35,22 +74,64 @@ func Access(ctx context.Context, i *AccessRequest) ([]byte, error) {
 	return client.Access(ctx, i)
 }
 
-// AccessRequest is used as input to a get secret request.
-type AccessRequest struct {
-	// Bucket is the name of the bucket where the secret lives.
-	Bucket string
-
-	// Object is the name of the object in Cloud Storage.
-	Object string
-}
-
-// Access reads the contents of the secret from the bucket, decrypting the
-// ciphertext using Cloud KMS.
-func (c *Client) Access(ctx context.Context, i *AccessRequest) ([]byte, error) {
+// Access accesses a secret. When given a SecretManagerAccessRequest, this
+// accesses a secret from Secret Manager. When given a StorageAccessRequest,
+// this accesses a secret stored in Cloud Storage encrypted with Cloud KMS.
+func (c *Client) Access(ctx context.Context, i accessRequest) ([]byte, error) {
 	if i == nil {
 		return nil, errors.New("missing request")
 	}
 
+	switch t := i.(type) {
+	case *SecretManagerAccessRequest:
+		return c.secretManagerAccess(ctx, t)
+	case *StorageAccessRequest:
+		return c.storageAccess(ctx, t)
+	default:
+		return nil, errors.Errorf("unknown access type %T", t)
+	}
+}
+
+func (c *Client) secretManagerAccess(ctx context.Context, i *SecretManagerAccessRequest) ([]byte, error) {
+	project := i.Project
+	if project == "" {
+		return nil, errors.New("missing project")
+	}
+
+	name := i.Name
+	if name == "" {
+		return nil, errors.New("missing secret name")
+	}
+
+	version := i.Version
+	if version == "" {
+		version = "latest"
+	}
+
+	logger := c.Logger().WithFields(logrus.Fields{
+		"project": project,
+		"name":    name,
+		"version": version,
+	})
+
+	logger.Debug("access.start")
+	defer logger.Debug("access.finish")
+
+	resp, err := c.secretManagerClient.AccessSecretVersion(ctx, &secretspb.AccessSecretVersionRequest{
+		Name: fmt.Sprintf("projects/%s/secrets/%s/versions/%s", project, name, version),
+	})
+	if err != nil {
+		terr, ok := grpcstatus.FromError(err)
+		if ok && terr.Code() == grpccodes.NotFound {
+			return nil, errSecretDoesNotExist
+		}
+		return nil, errors.Wrap(err, "failed to access secret")
+	}
+
+	return resp.Payload.Data, nil
+}
+
+func (c *Client) storageAccess(ctx context.Context, i *StorageAccessRequest) ([]byte, error) {
 	bucket := i.Bucket
 	if bucket == "" {
 		return nil, errors.New("missing bucket name")
@@ -61,74 +142,27 @@ func (c *Client) Access(ctx context.Context, i *AccessRequest) ([]byte, error) {
 		return nil, errors.New("missing object name")
 	}
 
-	// Get attributes to find the KMS key
-	attrs, err := c.storageClient.
-		Bucket(bucket).
-		Object(object).
-		Attrs(ctx)
-	if err == storage.ErrObjectNotExist {
-		return nil, errors.New("secret object not found")
-	}
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read secret metadata")
-	}
-	if attrs.Metadata == nil || attrs.Metadata[MetadataKMSKey] == "" {
-		return nil, errors.New("missing kms key in secret metadata")
-	}
-	key := attrs.Metadata[MetadataKMSKey]
-
-	// Download the file from GCS
-	ior, err := c.storageClient.
-		Bucket(bucket).
-		Object(object).
-		NewReader(ctx)
-	if err == storage.ErrObjectNotExist {
-		return nil, errors.New("secret object not found")
-	}
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read secret")
+	generation := i.Generation
+	if generation == 0 {
+		generation = -1
 	}
 
-	// Read the entire response into memory
-	data, err := ioutil.ReadAll(ior)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to read secret into string")
-	}
-	if err := ior.Close(); err != nil {
-		return nil, errors.Wrap(err, "failed to close reader")
-	}
+	logger := c.Logger().WithFields(logrus.Fields{
+		"bucket":     bucket,
+		"object":     object,
+		"generation": generation,
+	})
 
-	// Split into parts
-	parts := strings.SplitN(string(data), ":", 2)
-	if len(parts) < 2 {
-		return nil, errors.New("invalid ciphertext: not enough parts")
-	}
+	logger.Debug("access.start")
+	defer logger.Debug("access.finish")
 
-	encDEK, err := base64.StdEncoding.DecodeString(parts[0])
-	if err != nil {
-		return nil, errors.New("invalid ciphertext: failed to parse dek")
-	}
-
-	ciphertext, err := base64.StdEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, errors.New("invalid ciphertext: failed to parse ciphertext")
-	}
-
-	// Decrypt the DEK using a KMS key
-	kmsResp, err := c.kmsClient.Decrypt(ctx, &kmspb.DecryptRequest{
-		Name:                        key,
-		Ciphertext:                  encDEK,
-		AdditionalAuthenticatedData: []byte(object),
+	secret, err := c.Read(ctx, &ReadRequest{
+		Bucket:     bucket,
+		Object:     object,
+		Generation: generation,
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to decrypt dek")
+		return nil, errors.Wrap(err, "failed to access secret")
 	}
-	dek := kmsResp.Plaintext
-
-	// Decrypt with the local key
-	plaintext, err := envelopeDecrypt(dek, ciphertext)
-	if err != nil {
-		return nil, errors.Wrap(err, "xxx")
-	}
-	return plaintext, nil
+	return secret.Plaintext, nil
 }

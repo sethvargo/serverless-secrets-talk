@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM golang:1.13-alpine AS builder
+FROM golang:1.14-alpine AS builder
 
 ENV GO111MODULE=on \
   CGO_ENABLED=0 \
@@ -25,7 +25,8 @@ COPY . .
 
 RUN go build \
   -a \
-  -ldflags "-s -w -extldflags 'static'" \
+  -trimpath \
+  -ldflags "-s -w -extldflags '-static'" \
   -installsuffix cgo \
   -tags netgo \
   -mod vendor \
@@ -34,6 +35,7 @@ RUN go build \
 
 
 
-FROM gcr.io/distroless/static
+FROM scratch
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /bin/myapp /bin/myapp
 ENTRYPOINT ["/bin/myapp"]

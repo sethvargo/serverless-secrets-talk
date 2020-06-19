@@ -23,7 +23,6 @@ import (
 	"strings"
 
 	cloudkms "cloud.google.com/go/kms/apiv1"
-	"github.com/pkg/errors"
 	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
 )
 
@@ -32,12 +31,12 @@ func kmsDecrypt(input string) (string, error) {
 
 	projectID, err := valueFromMetadata(ctx, "project/project-id")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get project ID")
+		return "", fmt.Errorf("failed to get project: %w", err)
 	}
 
 	zone, err := valueFromMetadata(ctx, "instance/zone")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get zone")
+		return "", fmt.Errorf("failed to get zone: %w", err)
 	}
 	zone = path.Base(zone)
 
@@ -46,7 +45,7 @@ func kmsDecrypt(input string) (string, error) {
 		region = zone[0:i]
 	}
 	if region == "" {
-		return "", errors.Errorf("failed to extract region from zone: %s", zone)
+		return "", fmt.Errorf("failed to extract region from zone %q", zone)
 	}
 
 	client, err := cloudkms.NewKeyManagementClient(ctx)

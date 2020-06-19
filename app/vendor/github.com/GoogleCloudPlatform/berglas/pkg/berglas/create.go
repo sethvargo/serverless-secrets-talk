@@ -16,27 +16,23 @@ package berglas
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
+	"path"
 
-	"cloud.google.com/go/storage"
 	"github.com/pkg/errors"
-	"google.golang.org/api/googleapi"
-	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
+	"github.com/sirupsen/logrus"
+	secretspb "google.golang.org/genproto/googleapis/cloud/secretmanager/v1"
+	grpccodes "google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 )
 
-// Create is a top-level package function for creating a secret. For large
-// volumes of secrets, please create a client instead.
-func Create(ctx context.Context, i *CreateRequest) error {
-	client, err := New(ctx)
-	if err != nil {
-		return err
-	}
-	return client.Create(ctx, i)
+type createRequest interface {
+	isCreateRequest()
 }
 
-// CreateRequest is used as input to a create a secret.
-type CreateRequest struct {
+// StorageCreateRequest is used as input to create a secret using Cloud Storage
+// encrypted with Cloud KMS.
+type StorageCreateRequest struct {
 	// Bucket is the name of the bucket where the secret lives.
 	Bucket string
 
@@ -50,111 +46,157 @@ type CreateRequest struct {
 	Plaintext []byte
 }
 
-// Create reads the contents of the secret from the bucket, decrypting the
-// ciphertext using Cloud KMS.
-func (c *Client) Create(ctx context.Context, i *CreateRequest) error {
+func (r *StorageCreateRequest) isCreateRequest() {}
+
+// CreateRequest is an alias for StorageCreateRequest for
+// backwards-compatability. New clients should use StorageCreateRequest.
+type CreateRequest = StorageCreateRequest
+
+// SecretManagerCreateRequest is used as input to create a secret using Secret
+// Manager.
+type SecretManagerCreateRequest struct {
+	// Project is the ID or number of the project from which to create the secret.
+	Project string
+
+	// Name is the name of the secret to create.
+	Name string
+
+	// Plaintext is the plaintext to store.
+	Plaintext []byte
+}
+
+func (r *SecretManagerCreateRequest) isCreateRequest() {}
+
+// Create is a top-level package function for creating a secret. For large
+// volumes of secrets, please create a client instead.
+func Create(ctx context.Context, i createRequest) (*Secret, error) {
+	client, err := New(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return client.Create(ctx, i)
+}
+
+// Create creates a secret. When given a SecretManagerCreateRequest, this
+// creates a secret using Secret Manager. When given a StorageCreateRequest,
+// this creates a secret stored in Cloud Storage encrypted with Cloud KMS.
+//
+// If the secret already exists, an error is returned. Use Update to update an
+// existing secret.
+func (c *Client) Create(ctx context.Context, i createRequest) (*Secret, error) {
 	if i == nil {
-		return errors.New("missing request")
+		return nil, errors.New("missing request")
 	}
 
-	bucket := i.Bucket
-	if bucket == "" {
-		return errors.New("missing bucket name")
+	switch t := i.(type) {
+	case *SecretManagerCreateRequest:
+		return c.secretManagerCreate(ctx, t)
+	case *StorageCreateRequest:
+		return c.storageCreate(ctx, t)
+	default:
+		return nil, errors.Errorf("unknown create type %T", t)
+	}
+}
+
+func (c *Client) secretManagerCreate(ctx context.Context, i *SecretManagerCreateRequest) (*Secret, error) {
+	project := i.Project
+	if project == "" {
+		return nil, errors.New("missing project")
 	}
 
-	object := i.Object
-	if object == "" {
-		return errors.New("missing object name")
-	}
-
-	key := i.Key
-	if key == "" {
-		return errors.New("missing key name")
+	name := i.Name
+	if name == "" {
+		return nil, errors.New("missing secret name")
 	}
 
 	plaintext := i.Plaintext
 	if plaintext == nil {
-		return errors.New("missing plaintext")
+		return nil, errors.New("missing plaintext")
 	}
 
-	// Generate a unique DEK and encrypt the plaintext locally (useful for large
-	// pieces of data).
-	dek, ciphertext, err := envelopeEncrypt(plaintext)
-	if err != nil {
-		return errors.Wrap(err, "failed to perform envelope encryption")
-	}
+	logger := c.Logger().WithFields(logrus.Fields{
+		"project": project,
+		"name":    name,
+	})
 
-	// Encrypt the plaintext using a KMS key
-	kmsResp, err := c.kmsClient.Encrypt(ctx, &kmspb.EncryptRequest{
-		Name:                        key,
-		Plaintext:                   dek,
-		AdditionalAuthenticatedData: []byte(object),
+	logger.Debug("create.start")
+	defer logger.Debug("create.finish")
+
+	logger.Debug("creating secret")
+
+	secretResp, err := c.secretManagerClient.CreateSecret(ctx, &secretspb.CreateSecretRequest{
+		Parent:   fmt.Sprintf("projects/%s", project),
+		SecretId: name,
+		Secret: &secretspb.Secret{
+			Replication: &secretspb.Replication{
+				Replication: &secretspb.Replication_Automatic_{
+					Automatic: &secretspb.Replication_Automatic{},
+				},
+			},
+		},
 	})
 	if err != nil {
-		return errors.Wrap(err, "failed to encrypt secret")
-	}
-	encDEK := kmsResp.Ciphertext
-
-	// Build the storage object contents. Contents will be of the format:
-	//
-	//    b64(kms_encrypted_dek):b64(dek_encrypted_plaintext)
-	blob := fmt.Sprintf("%s:%s",
-		base64.StdEncoding.EncodeToString(encDEK),
-		base64.StdEncoding.EncodeToString(ciphertext))
-
-	// Attempt to get the object first to build the CAS parameters
-	var conds storage.Conditions
-	attrs, err := c.storageClient.
-		Bucket(bucket).
-		Object(object).
-		Attrs(ctx)
-	switch err {
-	case nil:
-		conds.GenerationMatch = attrs.Generation
-		conds.MetagenerationMatch = attrs.Metageneration
-	case storage.ErrObjectNotExist:
-		conds.DoesNotExist = true
-	default:
-		return errors.Wrap(err, "failed to get object")
-	}
-
-	// Write the object with CAS
-	iow := c.storageClient.
-		Bucket(bucket).
-		Object(object).
-		If(conds).
-		NewWriter(ctx)
-	iow.ObjectAttrs.CacheControl = CacheControl
-	iow.ChunkSize = 1024
-
-	if iow.Metadata == nil {
-		iow.Metadata = make(map[string]string)
-	}
-
-	// Mark this as a secret
-	iow.Metadata[MetadataIDKey] = "1"
-
-	// If a specific key version was given, only store the key, not the key
-	// version, because decrypt calls can't specify a key version.
-	iow.Metadata[MetadataKMSKey] = kmsKeyTrimVersion(key)
-
-	if _, err := iow.Write([]byte(blob)); err != nil {
-		return errors.Wrap(err, "failed save encrypted ciphertext to storage")
-	}
-
-	// Close, handling any errors
-	if err := iow.Close(); err != nil {
-		if terr, ok := err.(*googleapi.Error); ok {
-			switch terr.Code {
-			case 404:
-				return errors.New("bucket does not exist")
-			case 412:
-				return errors.New("secret modified between read and write")
-			}
+		terr, ok := grpcstatus.FromError(err)
+		if ok && terr.Code() == grpccodes.AlreadyExists {
+			return nil, errSecretAlreadyExists
 		}
-
-		return errors.Wrap(err, "failed to close writer")
+		return nil, errors.Wrapf(err, "failed to create secret")
 	}
 
-	return nil
+	logger.Debug("creating secret version")
+
+	versionResp, err := c.secretManagerClient.AddSecretVersion(ctx, &secretspb.AddSecretVersionRequest{
+		Parent: secretResp.Name,
+		Payload: &secretspb.SecretPayload{
+			Data: plaintext,
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create secret version")
+	}
+
+	return &Secret{
+		Parent:    project,
+		Name:      name,
+		Version:   path.Base(versionResp.Name),
+		Plaintext: plaintext,
+		UpdatedAt: timestampToTime(versionResp.CreateTime),
+	}, nil
+}
+
+func (c *Client) storageCreate(ctx context.Context, i *StorageCreateRequest) (*Secret, error) {
+	bucket := i.Bucket
+	if bucket == "" {
+		return nil, errors.New("missing bucket name")
+	}
+
+	object := i.Object
+	if object == "" {
+		return nil, errors.New("missing object name")
+	}
+
+	key := i.Key
+	if key == "" {
+		return nil, errors.New("missing key name")
+	}
+
+	plaintext := i.Plaintext
+	if plaintext == nil {
+		return nil, errors.New("missing plaintext")
+	}
+
+	logger := c.Logger().WithFields(logrus.Fields{
+		"bucket": bucket,
+		"object": object,
+		"key":    key,
+	})
+
+	logger.Debug("create.start")
+	defer logger.Debug("create.finish")
+
+	secret, err := c.encryptAndWrite(ctx, bucket, object, key, plaintext, 0, 0)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create secret")
+	}
+	return secret, nil
 }

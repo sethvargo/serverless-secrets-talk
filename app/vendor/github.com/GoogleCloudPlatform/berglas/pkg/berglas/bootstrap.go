@@ -24,24 +24,20 @@ import (
 	"github.com/golang/protobuf/ptypes/duration"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/api/googleapi"
 	kmspb "google.golang.org/genproto/googleapis/cloud/kms/v1"
 	grpccodes "google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
 
-// Bootstrap is a top-level package that creates a Cloud Storage bucket and
-// Cloud KMS key with the proper IAM permissions.
-func Bootstrap(ctx context.Context, i *BootstrapRequest) error {
-	client, err := New(ctx)
-	if err != nil {
-		return err
-	}
-	return client.Bootstrap(ctx, i)
+type bootstrapRequest interface {
+	isBootstrapRequest()
 }
 
-// BootstrapRequest is used as input to a bootstrap a berglas setup.
-type BootstrapRequest struct {
+// StorageAccessRequest is used as input to bootstrap Cloud Storage and Cloud
+// KMS.
+type StorageBootstrapRequest struct {
 	// ProjectID is the ID of the project where the bucket should be created.
 	ProjectID string
 
@@ -61,13 +57,50 @@ type BootstrapRequest struct {
 	KMSCryptoKey string
 }
 
+func (r *StorageBootstrapRequest) isBootstrapRequest() {}
+
+// BootstrapRequest is an alias for StorageBootstrapRequest for
+// backwards-compatability. New clients should use StorageBootstrapRequest.
+type BootstrapRequest = StorageBootstrapRequest
+
+// SecretManagerBootstrapRequest is used as input to bootstrap Secret Manager.
+// This is a noop.
+type SecretManagerBootstrapRequest struct{}
+
+func (r *SecretManagerBootstrapRequest) isBootstrapRequest() {}
+
+// Bootstrap is a top-level package that creates a Cloud Storage bucket and
+// Cloud KMS key with the proper IAM permissions.
+func Bootstrap(ctx context.Context, i bootstrapRequest) error {
+	client, err := New(ctx)
+	if err != nil {
+		return err
+	}
+	return client.Bootstrap(ctx, i)
+}
+
 // Bootstrap adds IAM permission to the given entity to the storage object and the
 // underlying KMS key.
-func (c *Client) Bootstrap(ctx context.Context, i *BootstrapRequest) error {
+func (c *Client) Bootstrap(ctx context.Context, i bootstrapRequest) error {
 	if i == nil {
 		return errors.New("missing request")
 	}
 
+	switch t := i.(type) {
+	case *SecretManagerBootstrapRequest:
+		return c.secretManagerBootstrap(ctx, t)
+	case *StorageBootstrapRequest:
+		return c.storageBootstrap(ctx, t)
+	default:
+		return errors.Errorf("unknown bootstrap type %T", t)
+	}
+}
+
+func (c *Client) secretManagerBootstrap(ctx context.Context, i *SecretManagerBootstrapRequest) error {
+	return nil // noop
+}
+
+func (c *Client) storageBootstrap(ctx context.Context, i *StorageBootstrapRequest) error {
 	projectID := i.ProjectID
 	if projectID == "" {
 		return errors.New("missing project ID")
@@ -98,19 +131,37 @@ func (c *Client) Bootstrap(ctx context.Context, i *BootstrapRequest) error {
 		kmsCryptoKey = "berglas-key"
 	}
 
-	// Attempt to create the KMS key ring
+	logger := c.Logger().WithFields(logrus.Fields{
+		"project_id":      projectID,
+		"bucket":          bucket,
+		"bucket_location": bucketLocation,
+		"kms_location":    kmsLocation,
+		"kms_key_ring":    kmsKeyRing,
+		"kms_crypto_key":  kmsCryptoKey,
+	})
+
+	logger.Debug("bootstrap.start")
+	defer logger.Debug("bootstrap.finish")
+
+	// Create the KMS key ring
+	logger.Debug("creating KMS key ring")
+
 	if _, err := c.kmsClient.CreateKeyRing(ctx, &kmspb.CreateKeyRingRequest{
 		Parent: fmt.Sprintf("projects/%s/locations/%s",
 			projectID, kmsLocation),
 		KeyRingId: kmsKeyRing,
 	}); err != nil {
+		logger.WithError(err).Error("failed to create KMS key ring")
+
 		terr, ok := grpcstatus.FromError(err)
 		if !ok || terr.Code() != grpccodes.AlreadyExists {
 			return errors.Wrapf(err, "failed to create KMS key ring %s", kmsKeyRing)
 		}
 	}
 
-	// Attempt to create the KMS crypto key
+	// Create the KMS crypto key
+	logger.Debug("creating KMS crypto key")
+
 	rotationPeriod := 30 * 24 * time.Hour
 	if _, err := c.kmsClient.CreateCryptoKey(ctx, &kmspb.CreateCryptoKeyRequest{
 		Parent: fmt.Sprintf("projects/%s/locations/%s/keyRings/%s",
@@ -132,6 +183,8 @@ func (c *Client) Bootstrap(ctx context.Context, i *BootstrapRequest) error {
 			},
 		},
 	}); err != nil {
+		logger.WithError(err).Error("failed to create KMS crypto key")
+
 		terr, ok := grpcstatus.FromError(err)
 		if !ok || terr.Code() != grpccodes.AlreadyExists {
 			return errors.Wrapf(err, "failed to create KMS crypto key %s", kmsCryptoKey)
@@ -139,6 +192,8 @@ func (c *Client) Bootstrap(ctx context.Context, i *BootstrapRequest) error {
 	}
 
 	// Create the storage bucket
+	logger.Debug("creating bucket")
+
 	if err := c.storageClient.Bucket(bucket).Create(ctx, projectID, &storage.BucketAttrs{
 		PredefinedACL:              "private",
 		PredefinedDefaultObjectACL: "private",
@@ -160,10 +215,11 @@ func (c *Client) Bootstrap(ctx context.Context, i *BootstrapRequest) error {
 			"purpose": "berglas",
 		},
 	}); err != nil {
-		if isBucketAlreadyExistsError(err) {
-			err = errors.New("bucket already exists")
+		logger.WithError(err).Error("failed to create bucket")
+
+		if !isBucketAlreadyExistsError(err) {
+			return errors.Wrapf(err, "failed to create storage bucket %s", bucket)
 		}
-		return errors.Wrapf(err, "failed to create storage bucket %s", bucket)
 	}
 
 	return nil

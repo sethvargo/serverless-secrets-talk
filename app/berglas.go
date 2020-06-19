@@ -20,7 +20,6 @@ import (
 	"fmt"
 
 	"github.com/GoogleCloudPlatform/berglas/pkg/berglas"
-	"github.com/pkg/errors"
 )
 
 func berglasAccess(obj string) (string, error) {
@@ -28,7 +27,7 @@ func berglasAccess(obj string) (string, error) {
 
 	projectID, err := valueFromMetadata(ctx, "project/project-id")
 	if err != nil {
-		return "", errors.Wrap(err, "failed to get project ID")
+		return "", fmt.Errorf("failed to get project: %w", err)
 	}
 
 	resp, err := berglas.Access(ctx, &berglas.AccessRequest{

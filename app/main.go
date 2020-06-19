@@ -49,6 +49,11 @@ type app struct {
 }
 
 func main() {
+	redisPass, err := kmsDecrypt(redisPass)
+	if err != nil {
+		panic(err)
+	}
+
 	redisPool := &redis.Pool{
 		MaxIdle:     3,
 		MaxActive:   10,
